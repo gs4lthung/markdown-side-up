@@ -285,7 +285,179 @@ function assembleDocx({ bodyXml, rels, media, exts, orderedNumIds, title }) {
   return zipStore(files);
 }
 
+// ── EMU / sizing ─────────────────────────────────────────────────────────────
+const MAX_IMG_W_EMU = 5943600; // 6.5in content width
+function emuFromPx(px) {
+  return Math.round(px * 9525);
+}
+
+// ── Build context (accumulates rels, media, numbering, ids, skip count) ──────
+function createCtx() {
+  return {
+    rels: [], // {id, type, target, external}
+    media: [], // {name, bytes}
+    exts: new Set(), // 'png' | 'jpeg'
+    orderedNumIds: [], // numIds for ordered lists (restart numbering)
+    skipped: 0, // count of items that fell back to text
+    _rid: 3, // rId1=styles, rId2=numbering are fixed
+    _mediaN: 0,
+    _docPr: 0,
+    _numId: 1, // numId 1 = bullets; newOrderedNumId() returns 2, 3, …
+    addImage(bytes, ext) {
+      const id = "rId" + this._rid++;
+      const name = `media/img${++this._mediaN}.${ext}`;
+      this.media.push({ name, bytes });
+      this.exts.add(ext);
+      this.rels.push({
+        id,
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+        target: name,
+      });
+      return id;
+    },
+    addHyperlink(url) {
+      const id = "rId" + this._rid++;
+      this.rels.push({
+        id,
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        target: url,
+        external: true,
+      });
+      return id;
+    },
+    newOrderedNumId() {
+      const n = ++this._numId;
+      this.orderedNumIds.push(n);
+      return n;
+    },
+    newDocPrId() {
+      return ++this._docPr;
+    },
+  };
+}
+
+// ── Run / paragraph helpers ──────────────────────────────────────────────────
+// rpr: { b, i, strike, code, color } → run properties XML
+function rprXml(rpr) {
+  if (!rpr) return "";
+  let x = "";
+  if (rpr.code) x += '<w:rStyle w:val="CodeChar"/>';
+  else if (rpr.link) x += '<w:rStyle w:val="Hyperlink"/>';
+  if (rpr.b) x += "<w:b/>";
+  if (rpr.i) x += "<w:i/>";
+  if (rpr.strike) x += "<w:strike/>";
+  if (rpr.color) x += `<w:color w:val="${rpr.color}"/>`;
+  return x ? `<w:rPr>${x}</w:rPr>` : "";
+}
+
+function runXml(text, rpr) {
+  if (!text) return "";
+  return `<w:r>${rprXml(rpr)}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+}
+
+function paragraph(styleId, innerXml, extraPPr) {
+  const pPr =
+    (styleId ? `<w:pStyle w:val="${styleId}"/>` : "") + (extraPPr || "");
+  return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${innerXml}</w:p>`;
+}
+
+// ── Inline walker: DOM inline nodes → concatenated <w:r> runs ─────────────────
+async function inlineToRuns(node, ctx, rpr) {
+  let out = "";
+  for (const child of node.childNodes) {
+    if (child.nodeType === 3) {
+      // text
+      out += runXml(child.nodeValue, rpr);
+      continue;
+    }
+    if (child.nodeType !== 1) continue; // skip comments etc.
+    const tag = child.tagName.toLowerCase();
+    if (tag === "br") {
+      out += "<w:r><w:br/></w:r>";
+      continue;
+    }
+    if (tag === "strong" || tag === "b") {
+      out += await inlineToRuns(child, ctx, { ...rpr, b: true });
+      continue;
+    }
+    if (tag === "em" || tag === "i") {
+      out += await inlineToRuns(child, ctx, { ...rpr, i: true });
+      continue;
+    }
+    if (tag === "del" || tag === "s" || tag === "strike") {
+      out += await inlineToRuns(child, ctx, { ...rpr, strike: true });
+      continue;
+    }
+    if (tag === "code") {
+      out += await inlineToRuns(child, ctx, { ...rpr, code: true });
+      continue;
+    }
+    if (tag === "a") {
+      const href = child.getAttribute("href") || "";
+      if (/^https?:|^mailto:/i.test(href)) {
+        const id = ctx.addHyperlink(href);
+        out += `<w:hyperlink r:id="${id}">${await inlineToRuns(child, ctx, { ...rpr, link: true })}</w:hyperlink>`;
+      } else {
+        out += await inlineToRuns(child, ctx, rpr); // internal anchors: keep text only
+      }
+      continue;
+    }
+    // Inline <img> (Task 9) and inline math (Task 11) branches get inserted here,
+    // BEFORE this generic recurse fallback. Both walkers are async — always await.
+    out += await inlineToRuns(child, ctx, rpr);
+  }
+  return out;
+}
+
+// ── Block walker: children of .md-body → body XML ────────────────────────────
+async function blocksToOoxml(container, ctx) {
+  let out = "";
+  for (const el of container.children) {
+    const tag = el.tagName.toLowerCase();
+    if (/^h[1-6]$/.test(tag)) {
+      out += paragraph("Heading" + tag[1], await inlineToRuns(el, ctx, null));
+    } else if (tag === "p") {
+      out += paragraph(null, await inlineToRuns(el, ctx, null));
+      // ── Later tasks insert their block branches here, before the final else ──
+    } else {
+      // Fallback for unrecognized blocks: render their text as a paragraph.
+      out += paragraph(null, await inlineToRuns(el, ctx, null));
+    }
+  }
+  return out;
+}
+
+// ── Orchestrator ─────────────────────────────────────────────────────────────
+async function exportDocx({ container, filename, title }) {
+  const ctx = createCtx();
+  const bodyXml = await blocksToOoxml(container, ctx);
+  const bytes = assembleDocx({
+    bodyXml,
+    rels: ctx.rels,
+    media: ctx.media,
+    exts: ctx.exts,
+    orderedNumIds: ctx.orderedNumIds,
+    title: title || filename,
+  });
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return { skipped: ctx.skipped };
+}
+
 // ── Environment exports ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { crc32, zipStore, escapeXml, contentTypesXml, rootRelsXml, documentRelsXml, stylesXml, numberingXml, documentXml, corePropsXml, assembleDocx };
+}
+
+if (typeof window !== "undefined") {
+  window.MdDocx = { export: exportDocx };
 }
