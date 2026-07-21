@@ -149,3 +149,55 @@ test("stylesXml respects OOXML child-element ordering (xsd:sequence)", () => {
   const cb = s.indexOf('w:styleId="CodeBlock"');
   assert.ok(s.indexOf("<w:shd ", cb) < s.indexOf("<w:spacing ", cb), "codeblock shd before spacing");
 });
+
+const { assembleDocx } = require("../docx-export.js");
+
+test("assembleDocx produces a valid ZIP containing all required parts", () => {
+  const bytes = assembleDocx({
+    bodyXml: '<w:p><w:r><w:t xml:space="preserve">Hi</w:t></w:r></w:p>',
+    rels: [],
+    media: [],
+    exts: new Set(),
+    orderedNumIds: [],
+    title: "Doc",
+  });
+  const read = readZip(bytes);
+  for (const part of [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "docProps/core.xml",
+    "word/document.xml",
+    "word/_rels/document.xml.rels",
+    "word/styles.xml",
+    "word/numbering.xml",
+  ]) {
+    assert.ok(read[part], "missing part: " + part);
+  }
+  const doc = new TextDecoder().decode(read["word/document.xml"].bytes);
+  assert.ok(doc.includes('<w:t xml:space="preserve">Hi</w:t>'));
+});
+
+test("assembleDocx includes media files and their content-type declarations", () => {
+  const bytes = assembleDocx({
+    bodyXml: "<w:p/>",
+    rels: [
+      {
+        id: "rId3",
+        type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+        target: "media/img1.png",
+      },
+    ],
+    media: [{ name: "media/img1.png", bytes: new Uint8Array([1, 2, 3]) }],
+    exts: new Set(["png"]),
+    orderedNumIds: [],
+    title: "Doc",
+  });
+  const read = readZip(bytes);
+  assert.ok(read["word/media/img1.png"], "media file present");
+  const ct = new TextDecoder().decode(read["[Content_Types].xml"].bytes);
+  assert.ok(ct.includes("image/png"));
+  const rels = new TextDecoder().decode(
+    read["word/_rels/document.xml.rels"].bytes,
+  );
+  assert.ok(rels.includes("rId3") && rels.includes("media/img1.png"));
+});

@@ -263,7 +263,29 @@ function numberingXml(orderedNumIds) {
   );
 }
 
+// ── Package assembler ────────────────────────────────────────────────────────
+function assembleDocx({ bodyXml, rels, media, exts, orderedNumIds, title }) {
+  const enc = new TextEncoder();
+  const files = [
+    { name: "[Content_Types].xml", bytes: enc.encode(contentTypesXml(exts)) },
+    { name: "_rels/.rels", bytes: enc.encode(rootRelsXml()) },
+    { name: "docProps/core.xml", bytes: enc.encode(corePropsXml(title)) },
+    { name: "word/document.xml", bytes: enc.encode(documentXml(bodyXml)) },
+    {
+      name: "word/_rels/document.xml.rels",
+      bytes: enc.encode(documentRelsXml(rels)),
+    },
+    { name: "word/styles.xml", bytes: enc.encode(stylesXml()) },
+    {
+      name: "word/numbering.xml",
+      bytes: enc.encode(numberingXml(orderedNumIds)),
+    },
+  ];
+  for (const m of media) files.push({ name: "word/" + m.name, bytes: m.bytes });
+  return zipStore(files);
+}
+
 // ── Environment exports ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { crc32, zipStore, escapeXml, contentTypesXml, rootRelsXml, documentRelsXml, stylesXml, numberingXml, documentXml, corePropsXml };
+  module.exports = { crc32, zipStore, escapeXml, contentTypesXml, rootRelsXml, documentRelsXml, stylesXml, numberingXml, documentXml, corePropsXml, assembleDocx };
 }
