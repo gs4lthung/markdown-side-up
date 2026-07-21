@@ -409,6 +409,56 @@ async function inlineToRuns(node, ctx, rpr) {
   return out;
 }
 
+// ── Lists ────────────────────────────────────────────────────────────────────
+async function listToOoxml(listEl, ctx, ilvl, numId) {
+  const ordered = listEl.tagName.toLowerCase() === "ol";
+  // Top-level ordered list gets its own numId so numbering restarts at 1.
+  const myNumId = ordered ? (numId != null ? numId : ctx.newOrderedNumId()) : 1;
+  let out = "";
+  for (const li of listEl.children) {
+    if (li.tagName.toLowerCase() !== "li") continue;
+
+    // Task-list item: <li class="task-item"><label><input ...> text</label>…</li>
+    const isTask = li.classList.contains("task-item");
+    const checkbox = li.querySelector(
+      ':scope > label > input[type="checkbox"]',
+    );
+    const glyph = isTask ? (checkbox && checkbox.checked ? "☑ " : "☐ ") : "";
+
+    // Inline content of this item = the <li>/<label> minus nested lists.
+    const source = li.querySelector(":scope > label") || li;
+    let runs = "";
+    if (glyph) runs += runXml(glyph, null);
+    for (const node of source.childNodes) {
+      if (node.nodeType === 1) {
+        const t = node.tagName.toLowerCase();
+        if (t === "ul" || t === "ol" || t === "input") continue; // nested lists / the checkbox handled separately
+      }
+      runs += await inlineToRuns({ childNodes: [node] }, ctx, null);
+    }
+
+    const numPr = `<w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${isTask ? 1 : myNumId}"/></w:numPr>`;
+    // Task items look best without a bullet marker → use ilvl but suppress via a plain paragraph.
+    if (isTask) {
+      out += paragraph(
+        "ListParagraph",
+        runs,
+        `<w:ind w:left="${720 * (ilvl + 1)}" w:hanging="360"/>`,
+      );
+    } else {
+      out += paragraph("ListParagraph", runs, numPr);
+    }
+
+    // Recurse into nested lists.
+    for (const child of li.children) {
+      const ct = child.tagName.toLowerCase();
+      if (ct === "ul" || ct === "ol")
+        out += await listToOoxml(child, ctx, ilvl + 1, null);
+    }
+  }
+  return out;
+}
+
 // ── Block walker: children of .md-body → body XML ────────────────────────────
 async function blocksToOoxml(container, ctx) {
   let out = "";
@@ -427,6 +477,8 @@ async function blocksToOoxml(container, ctx) {
     } else if (tag === 'hr') {
       out += '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="D0D7DE"/></w:pBdr></w:pPr></w:p>';
       // ── Later tasks insert their block branches here, before the final else ──
+    } else if (tag === 'ul' || tag === 'ol') {
+      out += await listToOoxml(el, ctx, 0, null);
     } else {
       // Fallback for unrecognized blocks: render their text as a paragraph.
       out += paragraph(null, await inlineToRuns(el, ctx, null));
