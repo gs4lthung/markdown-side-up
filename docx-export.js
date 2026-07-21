@@ -106,7 +106,164 @@ function zipStore(files) {
   return out;
 }
 
+// ── XML helpers ──────────────────────────────────────────────────────────────
+const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
+
+function escapeXml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// ── OOXML parts ──────────────────────────────────────────────────────────────
+function contentTypesXml(exts) {
+  const media = [];
+  if (exts.has("png"))
+    media.push('<Default Extension="png" ContentType="image/png"/>');
+  if (exts.has("jpeg"))
+    media.push('<Default Extension="jpeg" ContentType="image/jpeg"/>');
+  return (
+    XML_DECL +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    media.join("") +
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+    '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+    "</Types>"
+  );
+}
+
+function rootRelsXml() {
+  return (
+    XML_DECL +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+    "</Relationships>"
+  );
+}
+
+function documentRelsXml(rels) {
+  const fixed =
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>';
+  const dyn = rels
+    .map(
+      (r) =>
+        `<Relationship Id="${r.id}" Type="${r.type}" Target="${escapeXml(r.target)}"${r.external ? ' TargetMode="External"' : ""}/>`,
+    )
+    .join("");
+  return (
+    XML_DECL +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    fixed +
+    dyn +
+    "</Relationships>"
+  );
+}
+
+function corePropsXml(title) {
+  return (
+    XML_DECL +
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"' +
+    ' xmlns:dc="http://purl.org/dc/elements/1.1/">' +
+    `<dc:title>${escapeXml(title)}</dc:title>` +
+    "<dc:creator>Markdown Viewer</dc:creator>" +
+    "</cp:coreProperties>"
+  );
+}
+
+function documentXml(bodyXml) {
+  return (
+    XML_DECL +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' +
+    ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
+    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
+    ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    "<w:body>" +
+    bodyXml +
+    "<w:sectPr>" +
+    '<w:pgSz w:w="12240" w:h="15840"/>' +
+    '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>' +
+    "</w:sectPr>" +
+    "</w:body></w:document>"
+  );
+}
+
+function stylesXml() {
+  const heading = (id, name, lvl, halfPt, color) =>
+    `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/>` +
+    `<w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="${lvl}"/></w:pPr>` +
+    `<w:rPr><w:b/><w:color w:val="${color}"/><w:sz w:val="${halfPt}"/><w:szCs w:val="${halfPt}"/></w:rPr></w:style>`;
+  const border = 'w:val="single" w:sz="4" w:space="0" w:color="D0D7DE"';
+  return (
+    XML_DECL +
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault>' +
+    '<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>' +
+    heading("Heading1", "heading 1", 0, 48, "111111") +
+    heading("Heading2", "heading 2", 1, 36, "111111") +
+    heading("Heading3", "heading 3", 2, 28, "111111") +
+    heading("Heading4", "heading 4", 3, 24, "111111") +
+    heading("Heading5", "heading 5", 4, 22, "333333") +
+    heading("Heading6", "heading 6", 5, 22, "555555") +
+    '<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/>' +
+    '<w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="12" w:color="D0D7DE"/></w:pBdr><w:ind w:left="480"/></w:pPr>' +
+    '<w:rPr><w:i/><w:color w:val="57606A"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/>' +
+    '<w:pPr><w:spacing w:after="0"/><w:contextualSpacing/></w:pPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/><w:basedOn w:val="Normal"/>' +
+    '<w:pPr><w:shd w:val="clear" w:color="auto" w:fill="F6F8FA"/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>' +
+    '<w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>' +
+    '<w:style w:type="character" w:styleId="CodeChar"><w:name w:val="Code Char"/>' +
+    '<w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:sz w:val="20"/><w:szCs w:val="20"/><w:shd w:val="clear" w:color="auto" w:fill="EFF1F3"/></w:rPr></w:style>' +
+    '<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0969DA"/><w:u w:val="single"/></w:rPr></w:style>' +
+    '<w:style w:type="table" w:default="1" w:styleId="TableGrid"><w:name w:val="Table Grid"/>' +
+    `<w:tblPr><w:tblBorders><w:top ${border}/><w:left ${border}/><w:bottom ${border}/><w:right ${border}/><w:insideH ${border}/><w:insideV ${border}/></w:tblBorders></w:tblPr></w:style>` +
+    "</w:styles>"
+  );
+}
+
+function numberingXml(orderedNumIds) {
+  const bulletChars = ["•", "◦", "▪", "•", "◦", "▪", "•", "◦", "▪"];
+  let bulletLvls = "",
+    decimalLvls = "";
+  for (let i = 0; i < 9; i++) {
+    const ind = 720 * (i + 1);
+    bulletLvls +=
+      `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${bulletChars[i]}"/>` +
+      `<w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${ind}" w:hanging="360"/></w:pPr></w:lvl>`;
+    decimalLvls +=
+      `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%${i + 1}."/>` +
+      `<w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${ind}" w:hanging="360"/></w:pPr></w:lvl>`;
+  }
+  const ordered = orderedNumIds
+    .map(
+      (id) =>
+        `<w:num w:numId="${id}"><w:abstractNumId w:val="1"/>` +
+        `<w:lvlOverride w:ilvl="0"><w:startOverride w:val="1"/></w:lvlOverride></w:num>`,
+    )
+    .join("");
+  return (
+    XML_DECL +
+    '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    `<w:abstractNum w:abstractNumId="0">${bulletLvls}</w:abstractNum>` +
+    `<w:abstractNum w:abstractNumId="1">${decimalLvls}</w:abstractNum>` +
+    '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>' +
+    ordered +
+    "</w:numbering>"
+  );
+}
+
 // ── Environment exports ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { crc32, zipStore };
+  module.exports = { crc32, zipStore, escapeXml, contentTypesXml, rootRelsXml, documentRelsXml, stylesXml, numberingXml, documentXml, corePropsXml };
 }
