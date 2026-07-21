@@ -418,6 +418,14 @@ async function blocksToOoxml(container, ctx) {
       out += paragraph("Heading" + tag[1], await inlineToRuns(el, ctx, null));
     } else if (tag === "p") {
       out += paragraph(null, await inlineToRuns(el, ctx, null));
+    } else if (tag === 'blockquote') {
+      // Emit each child block as a Quote-styled paragraph (await — inlineToRuns is async).
+      // v1 limitation: nested lists/code/tables inside a quote are flattened to Quote
+      // paragraph text rather than reproduced as nested structure — but never dropped.
+      const kids = el.children.length ? [...el.children] : [el];
+      for (const child of kids) out += paragraph('Quote', await inlineToRuns(child, ctx, null));
+    } else if (tag === 'hr') {
+      out += '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="D0D7DE"/></w:pBdr></w:pPr></w:p>';
       // ── Later tasks insert their block branches here, before the final else ──
     } else {
       // Fallback for unrecognized blocks: render their text as a paragraph.
