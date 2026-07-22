@@ -291,6 +291,99 @@ function emuFromPx(px) {
   return Math.round(px * 9525);
 }
 
+// ── Images ───────────────────────────────────────────────────────────────────
+function extFromMime(mime) {
+  if (/png/i.test(mime)) return "png";
+  if (/jpe?g/i.test(mime)) return "jpeg";
+  return null;
+}
+
+async function bitmapToPng(blob) {
+  const bmp = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bmp.width;
+  canvas.height = bmp.height;
+  const ctx2d = canvas.getContext("2d");
+  ctx2d.drawImage(bmp, 0, 0);
+  const png = await new Promise((res, rej) =>
+    canvas.toBlob(
+      (b) => (b ? res(b) : rej(new Error("toBlob failed"))),
+      "image/png",
+    ),
+  );
+  return {
+    bytes: new Uint8Array(await png.arrayBuffer()),
+    w: bmp.width,
+    h: bmp.height,
+  };
+}
+
+async function imgToBytes(imgEl) {
+  const src = imgEl.currentSrc || imgEl.getAttribute("src") || "";
+  if (!src) return null;
+  try {
+    const resp = await fetch(src);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const blob = await resp.blob();
+    let ext = extFromMime(blob.type);
+    if (ext === "png" || ext === "jpeg") {
+      const bmp = await createImageBitmap(blob);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      const dims = { w: bmp.width, h: bmp.height };
+      return { bytes, ext, wPx: dims.w, hPx: dims.h };
+    }
+    // gif/webp/svg/bmp → normalize to PNG
+    const norm = await bitmapToPng(blob);
+    return { bytes: norm.bytes, ext: "png", wPx: norm.w, hPx: norm.h };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Scale (wPx,hPx) down so width never exceeds the content area; return EMUs.
+function fitEmu(wPx, hPx) {
+  let cx = emuFromPx(wPx),
+    cy = emuFromPx(hPx);
+  if (cx > MAX_IMG_W_EMU) {
+    cy = Math.round(cy * (MAX_IMG_W_EMU / cx));
+    cx = MAX_IMG_W_EMU;
+  }
+  return { cx: Math.max(1, cx), cy: Math.max(1, cy) };
+}
+
+function drawingXml(rId, cx, cy, docPrId, inline) {
+  const anchor = inline ? "wp:inline" : "wp:inline"; // block images are inline in their own paragraph
+  return (
+    `<w:r><w:drawing><${anchor} distT="0" distB="0" distL="0" distR="0">` +
+    `<wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>` +
+    `<wp:docPr id="${docPrId}" name="Picture ${docPrId}"/>` +
+    '<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+    '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+    '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    `<pic:nvPicPr><pic:cNvPr id="${docPrId}" name="Picture ${docPrId}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+    `</pic:pic></a:graphicData></a:graphic></${anchor}></w:drawing></w:r>`
+  );
+}
+
+async function imageRun(imgEl, ctx) {
+  const data = await imgToBytes(imgEl);
+  if (!data) {
+    ctx.skipped++;
+    const alt = imgEl.getAttribute("alt") || "image";
+    return runXml(`[image: ${alt} — could not embed]`, {
+      i: true,
+      color: "999999",
+    });
+  }
+  const rId = ctx.addImage(data.bytes, data.ext);
+  const { cx, cy } = fitEmu(data.wPx, data.hPx);
+  return drawingXml(rId, cx, cy, ctx.newDocPrId(), true);
+}
+
 // ── Build context (accumulates rels, media, numbering, ids, skip count) ──────
 function createCtx() {
   return {
@@ -402,6 +495,8 @@ async function inlineToRuns(node, ctx, rpr) {
       }
       continue;
     }
+    if (tag === 'img') { out += await imageRun(child, ctx); continue; }        // defensive: raw inline <img>
+    if (child.classList && child.classList.contains('img-download-btn')) { continue; } // skip UI chrome
     // Inline <img> (Task 9) and inline math (Task 11) branches get inserted here,
     // BEFORE this generic recurse fallback. Both walkers are async — always await.
     out += await inlineToRuns(child, ctx, rpr);
@@ -598,6 +693,9 @@ async function blocksToOoxml(container, ctx) {
       out += await tableToOoxml(el, ctx);
     } else if (el.classList.contains('cb-wrap')) {
       out += codeBlockToOoxml(el, ctx);
+    } else if (el.classList.contains('img-wrap')) {
+      const img = el.querySelector('img');
+      out += img ? `<w:p>${await imageRun(img, ctx)}</w:p>` : '';
     } else {
       // Fallback for unrecognized blocks: render their text as a paragraph.
       out += paragraph(null, await inlineToRuns(el, ctx, null));
