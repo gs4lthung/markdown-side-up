@@ -940,5 +940,8 @@ if (typeof module !== "undefined" && module.exports) {
 }
 
 if (typeof window !== "undefined") {
-  window.MdDocx = { export: exportDocx };
+  window.MdDocx = { export: exportDocx, version: "diagrams-1" };
+  // One-time load marker so you can confirm which build a tab is running:
+  // open DevTools on the .md page and check `MdDocx.version`.
+  try { console.info("[Markdown Viewer] DOCX export build:", window.MdDocx.version); } catch (e) {}
 }
