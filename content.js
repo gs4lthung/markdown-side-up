@@ -1396,14 +1396,15 @@
     const prevTheme = root.dataset.theme;
     const forceLight = prevTheme === 'dark' &&
       !!document.querySelector('.mermaid-pending, .mermaid-wrap[data-diagram]');
-    if (forceLight) root.dataset.theme = 'light';
+    // Re-render the already-rendered diagrams in light FIRST (while pending ones are still
+    // .mermaid-pending, so they aren't selected here) — then render the pending ones once
+    // below. This avoids double-rendering the pending diagrams.
+    if (forceLight) { root.dataset.theme = 'light'; await refreshMermaidTheme(); }
     // Mermaid renders lazily (only when scrolled into view), so diagrams below the fold
-    // are still pending at export time. Force-render them so they export as images —
-    // not the "Loading diagram…" placeholder text or the source-code fallback.
+    // are still pending at export time. Force-render them (in the now-current theme) so
+    // they export as images — not the "Loading diagram…" placeholder or source fallback.
     const pendingDiagrams = [...document.querySelectorAll('.mermaid-pending')];
     if (pendingDiagrams.length) await Promise.all(pendingDiagrams.map(b => _renderOneDiagram(b)));
-    // Re-render already-rendered diagrams to match the forced light theme.
-    if (forceLight) await refreshMermaidTheme();
 
     try {
       const base = (getFilename().replace(EXPORT_MD_EXT, '') || 'document');
