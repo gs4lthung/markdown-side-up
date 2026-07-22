@@ -497,6 +497,9 @@ async function inlineToRuns(node, ctx, rpr) {
     }
     if (tag === 'img') { out += await imageRun(child, ctx); continue; }        // defensive: raw inline <img>
     if (child.classList && child.classList.contains('img-download-btn')) { continue; } // skip UI chrome
+    if (child.classList && child.classList.contains('math-inline')) { out += await mathRun(child, ctx, false); continue; }
+    if (child.classList && child.classList.contains('math-block')) { out += await mathRun(child, ctx, true); continue; } // safety net if a block div lands inline
+    if (child.classList && child.classList.contains('math-error')) { out += runXml(child.textContent || '', { code: true, color: 'CF222E' }); continue; }
     // Inline <img> (Task 9) and inline math (Task 11) branches get inserted here,
     // BEFORE this generic recurse fallback. Both walkers are async — always await.
     out += await inlineToRuns(child, ctx, rpr);
@@ -734,6 +737,136 @@ async function diagramBlock(el, ctx) {
   return out;
 }
 
+// ── KaTeX math rasterization ─────────────────────────────────────────────────
+function bytesToBase64(bytes) {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+let _katexCssCache = null;
+async function fetchKatexCss() {
+  if (_katexCssCache != null) return _katexCssCache;
+  const resp = await fetch(chrome.runtime.getURL("katex/katex.min.css"));
+  _katexCssCache = await resp.text();
+  return _katexCssCache;
+}
+
+const _fontUriCache = new Map();
+async function fontDataUri(file) {
+  if (_fontUriCache.has(file)) return _fontUriCache.get(file);
+  const resp = await fetch(chrome.runtime.getURL("katex/fonts/" + file));
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  const uri = "data:font/woff2;base64," + bytesToBase64(bytes);
+  _fontUriCache.set(file, uri);
+  return uri;
+}
+
+// Build inlined CSS: layout rules verbatim + @font-face (used families only) with data-URI woff2.
+async function katexInlineCss(katexEl) {
+  const raw = await fetchKatexCss();
+  const used = new Set([
+    "KaTeX_Main",
+    "KaTeX_Math",
+    "KaTeX_Size1",
+    "KaTeX_Size2",
+  ]);
+  katexEl.querySelectorAll("*").forEach((n) => {
+    const ff = getComputedStyle(n).fontFamily || "";
+    ff.split(",").forEach((f) => {
+      const name = f.trim().replace(/["']/g, "");
+      if (name.indexOf("KaTeX_") === 0) used.add(name);
+    });
+  });
+  const faceRe = /@font-face\s*\{[^}]*\}/g;
+  const layout = raw.replace(faceRe, "");
+  const faces = raw.match(faceRe) || [];
+  let inlined = "";
+  for (const block of faces) {
+    const famM = block.match(/font-family\s*:\s*([^;}]+)/i);
+    if (!famM) continue;
+    const fam = famM[1].trim().replace(/["']/g, "");
+    if (!used.has(fam)) continue;
+    const woff2M = block.match(
+      /url\(\s*['"]?fonts\/([^)'"]+\.woff2)['"]?\s*\)/i,
+    );
+    if (!woff2M) {
+      inlined += block;
+      continue;
+    }
+    const uri = await fontDataUri(woff2M[1]);
+    const wM = block.match(/font-weight\s*:\s*([^;}]+)/i);
+    const sM = block.match(/font-style\s*:\s*([^;}]+)/i);
+    inlined +=
+      `@font-face{font-family:${fam};src:url(${uri}) format("woff2");` +
+      `font-weight:${wM ? wM[1].trim() : "normal"};font-style:${sM ? sM[1].trim() : "normal"}}`;
+  }
+  return inlined + layout;
+}
+
+async function mathToPng(katexEl) {
+  const css = await katexInlineCss(katexEl);
+  const rect = katexEl.getBoundingClientRect();
+  const pad = 2;
+  const w = Math.max(1, Math.ceil(rect.width) + pad * 2);
+  const h = Math.max(1, Math.ceil(rect.height) + pad * 2);
+  const inner = new XMLSerializer().serializeToString(katexEl);
+  const html = `<div xmlns="http://www.w3.org/1999/xhtml" style="display:inline-block;padding:${pad}px;color:#111111;background:#ffffff;">${inner}</div>`;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+    `<foreignObject width="${w}" height="${h}"><style>${css}</style>${html}</foreignObject></svg>`;
+  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  const img = await loadImage(url);
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const c = canvas.getContext("2d");
+  c.fillStyle = "#ffffff";
+  c.fillRect(0, 0, canvas.width, canvas.height);
+  c.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const png = await new Promise((res, rej) =>
+    canvas.toBlob(
+      (b) => (b ? res(b) : rej(new Error("toBlob failed"))),
+      "image/png",
+    ),
+  );
+  return { bytes: new Uint8Array(await png.arrayBuffer()), wPx: w, hPx: h };
+}
+
+async function mathRun(mathEl, ctx, display) {
+  // KaTeX failure renders <span class="math-error">tex</span> (no .katex, no annotation) —
+  // emit it as red monospace text directly; don't waste a rasterize attempt on it.
+  const errEl = mathEl.classList.contains("math-error")
+    ? mathEl
+    : mathEl.querySelector(".math-error");
+  if (errEl) {
+    const runs = runXml(errEl.textContent || "", { code: true, color: "CF222E" });
+    return display ? paragraph("CodeBlock", runs) : runs;
+  }
+  const katexEl = mathEl.querySelector(".katex") || mathEl;
+  try {
+    const { bytes, wPx, hPx } = await mathToPng(katexEl);
+    const rId = ctx.addImage(bytes, "png");
+    const { cx, cy } = fitEmu(wPx, hPx);
+    const run = drawingXml(rId, cx, cy, ctx.newDocPrId(), true);
+    return display
+      ? `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${run}</w:p>`
+      : run;
+  } catch (e) {
+    ctx.skipped++;
+    const ann = mathEl.querySelector(
+      'annotation[encoding="application/x-tex"]',
+    );
+    const tex = ann ? ann.textContent : mathEl.textContent || "";
+    const runs = runXml(tex, { code: true });
+    return display ? paragraph("CodeBlock", runs) : runs;
+  }
+}
+
 // ── Block walker: children of .md-body → body XML ────────────────────────────
 async function blocksToOoxml(container, ctx) {
   let out = "";
@@ -763,6 +896,8 @@ async function blocksToOoxml(container, ctx) {
       out += img ? `<w:p>${await imageRun(img, ctx)}</w:p>` : '';
     } else if (el.classList.contains('mermaid-wrap') || el.classList.contains('mermaid-pending') || el.classList.contains('mermaid-error')) {
       out += await diagramBlock(el, ctx);
+    } else if (el.classList.contains("math-block")) {
+      out += await mathRun(el, ctx, true);
     } else {
       // Fallback for unrecognized blocks: render their text as a paragraph.
       out += paragraph(null, await inlineToRuns(el, ctx, null));
