@@ -669,6 +669,71 @@ function codeBlockToOoxml(wrapEl, ctx) {
   return out;
 }
 
+// ── SVG → PNG rasterization ──────────────────────────────────────────────────
+function loadImage(url) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error("image load failed"));
+    img.src = url;
+  });
+}
+
+async function svgToPng(svgEl, scale) {
+  scale = scale || 2;
+  const rect = svgEl.getBoundingClientRect();
+  const w = Math.max(
+    1,
+    Math.ceil(rect.width || parseFloat(svgEl.getAttribute("width")) || 300),
+  );
+  const h = Math.max(
+    1,
+    Math.ceil(rect.height || parseFloat(svgEl.getAttribute("height")) || 200),
+  );
+  const clone = svgEl.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", w);
+  clone.setAttribute("height", h);
+  const svgStr = new XMLSerializer().serializeToString(clone);
+  const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
+  const img = await loadImage(url);
+  const canvas = document.createElement("canvas");
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const c = canvas.getContext("2d");
+  c.fillStyle = "#ffffff";
+  c.fillRect(0, 0, canvas.width, canvas.height);
+  c.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const png = await new Promise((res, rej) =>
+    canvas.toBlob(
+      (b) => (b ? res(b) : rej(new Error("toBlob failed"))),
+      "image/png",
+    ),
+  );
+  return { bytes: new Uint8Array(await png.arrayBuffer()), wPx: w, hPx: h };
+}
+
+async function diagramBlock(el, ctx) {
+  const svg = el.querySelector("svg");
+  if (svg) {
+    try {
+      const { bytes, wPx, hPx } = await svgToPng(svg, 2);
+      const rId = ctx.addImage(bytes, "png");
+      const { cx, cy } = fitEmu(wPx, hPx);
+      return `<w:p>${drawingXml(rId, cx, cy, ctx.newDocPrId(), true)}</w:p>`;
+    } catch (e) {
+      // fall through to source fallback
+    }
+  }
+  // Fallback: render the mermaid source as a code block.
+  ctx.skipped++;
+  const source = el.getAttribute("data-diagram") || el.textContent || "";
+  let out = "";
+  for (const line of String(source).split("\n"))
+    out += paragraph("CodeBlock", runXml(line, { code: true }));
+  return out;
+}
+
 // ── Block walker: children of .md-body → body XML ────────────────────────────
 async function blocksToOoxml(container, ctx) {
   let out = "";
@@ -696,6 +761,8 @@ async function blocksToOoxml(container, ctx) {
     } else if (el.classList.contains('img-wrap')) {
       const img = el.querySelector('img');
       out += img ? `<w:p>${await imageRun(img, ctx)}</w:p>` : '';
+    } else if (el.classList.contains('mermaid-wrap') || el.classList.contains('mermaid-pending') || el.classList.contains('mermaid-error')) {
+      out += await diagramBlock(el, ctx);
     } else {
       // Fallback for unrecognized blocks: render their text as a paragraph.
       out += paragraph(null, await inlineToRuns(el, ctx, null));

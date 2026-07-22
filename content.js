@@ -1380,42 +1380,38 @@
   async function doExport() {
     const btn = document.getElementById('btn-export');
     if (!btn || btn.classList.contains('exporting')) return;
-    if (!window.MdDocx) {
-      showToast('Export unavailable');
-      return;
-    }
-
-    // Sync the preview DOM with any unsaved editor text before exporting.
+    if (!window.MdDocx) { showToast('Export unavailable'); return; }
     if (currentMode === 'edit' || currentMode === 'split') flushPreview();
 
     const container = document.querySelector('#md-content .md-body');
-    if (!container) {
-      showToast('Nothing to export');
-      return;
-    }
+    if (!container) { showToast('Nothing to export'); return; }
 
     const orig = btn.innerHTML;
     btn.classList.add('exporting');
     btn.disabled = true;
-    btn.innerHTML =
-      '<svg class="spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span class="btn-label">Exporting…</span>';
+    btn.innerHTML = '<svg class="spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span class="btn-label">Exporting…</span>';
+
+    // Diagrams bake in the current theme; force light so exported PNGs match the light doc.
+    const root = document.documentElement;
+    const prevTheme = root.dataset.theme;
+    const forceLight = prevTheme === 'dark' && !!document.querySelector('.mermaid-wrap[data-diagram]');
+    if (forceLight) { root.dataset.theme = 'light'; await refreshMermaidTheme(); }
 
     try {
-      const base = getFilename().replace(EXPORT_MD_EXT, '') || 'document';
+      const base = (getFilename().replace(EXPORT_MD_EXT, '') || 'document');
       const { skipped } = await window.MdDocx.export({
         container,
         filename: base + '.docx',
         title: document.title || base,
       });
-      showToast(
-        skipped
-          ? `Exported — ${skipped} item${skipped > 1 ? 's' : ''} couldn't be embedded`
-          : 'Exported ' + base + '.docx',
-      );
+      showToast(skipped
+        ? `Exported — ${skipped} item${skipped > 1 ? 's' : ''} couldn't be embedded`
+        : 'Exported ' + base + '.docx');
     } catch (err) {
       console.error('DOCX export failed:', err);
       showToast('Export failed — see console');
     } finally {
+      if (forceLight) { root.dataset.theme = prevTheme; await refreshMermaidTheme(); }
       btn.classList.remove('exporting');
       btn.disabled = false;
       btn.innerHTML = orig;
