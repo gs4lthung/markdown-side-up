@@ -111,6 +111,7 @@ const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 
 function escapeXml(s) {
   return String(s)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "") // strip chars illegal in XML 1.0 (avoids repair prompt)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -498,7 +499,7 @@ async function inlineToRuns(node, ctx, rpr) {
     if (tag === 'img') { out += await imageRun(child, ctx); continue; }        // defensive: raw inline <img>
     if (child.classList && child.classList.contains('img-download-btn')) { continue; } // skip UI chrome
     if (child.classList && child.classList.contains('math-inline')) { out += await mathRun(child, ctx, false); continue; }
-    if (child.classList && child.classList.contains('math-block')) { out += await mathRun(child, ctx, true); continue; } // safety net if a block div lands inline
+    if (child.classList && child.classList.contains('math-block')) { out += await mathRun(child, ctx, false); continue; } // a block $$…$$ div can land mid-line; emit inline so we never nest <w:p> inside a run slot
     if (child.classList && child.classList.contains('math-error')) { out += runXml(child.textContent || '', { code: true, color: 'CF222E' }); continue; }
     // Inline <img> (Task 9) and inline math (Task 11) branches get inserted here,
     // BEFORE this generic recurse fallback. Both walkers are async — always await.
@@ -603,7 +604,8 @@ async function tableToOoxml(tableEl, ctx) {
     gridCols +
     "</w:tblGrid>" +
     trs +
-    "</w:tbl>"
+    "</w:tbl>" +
+    "<w:p/>" // spacer: Word merges adjacent <w:tbl> with nothing between; also satisfies "table not last body element"
   );
 }
 

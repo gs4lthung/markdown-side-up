@@ -85,6 +85,13 @@ test("escapeXml handles the five predefined entities", () => {
   );
 });
 
+test("escapeXml strips XML-illegal control chars but keeps tab/newline/CR", () => {
+  // \x00-\x08, \x0B, \x0C, \x0E-\x1F are illegal in XML 1.0 and must be dropped.
+  assert.strictEqual(escapeXml("a\x00b\x07c\x1Fd"), "abcd");
+  // Tab (\x09), LF (\x0A), CR (\x0D) are legal and must survive.
+  assert.strictEqual(escapeXml("a\tb\nc\rd"), "a\tb\nc\rd");
+});
+
 test("contentTypesXml declares media extensions only when used", () => {
   const none = contentTypesXml(new Set());
   assert.ok(!none.includes("image/png"));
