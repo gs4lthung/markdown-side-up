@@ -459,6 +459,56 @@ async function listToOoxml(listEl, ctx, ilvl, numId) {
   return out;
 }
 
+// ── Tables ───────────────────────────────────────────────────────────────────
+async function tableToOoxml(tableEl, ctx) {
+  const rows = [...tableEl.querySelectorAll("tr")];
+  // CT_Tbl requires <w:tblGrid> (one <w:gridCol/> per column) BETWEEN tblPr and the
+  // rows. Omitting it triggers Word's "unreadable content — recover?" repair prompt
+  // on every table.
+  const firstRow = rows[0];
+  const colCount = firstRow ? firstRow.querySelectorAll("th, td").length : 1;
+  let gridCols = "";
+  for (let i = 0; i < colCount; i++) gridCols += "<w:gridCol/>";
+
+  let trs = "";
+  for (const tr of rows) {
+    // for...of (not .forEach) so we can await inlineToRuns per cell
+    let tcs = "";
+    for (const cell of tr.querySelectorAll("th, td")) {
+      const isHeader = cell.tagName.toLowerCase() === "th";
+      const align = (
+        cell.style.textAlign ||
+        cell.getAttribute("align") ||
+        ""
+      ).toLowerCase();
+      const jc =
+        align === "center"
+          ? '<w:jc w:val="center"/>'
+          : align === "right"
+            ? '<w:jc w:val="right"/>'
+            : "";
+      const shd = isHeader
+        ? '<w:shd w:val="clear" w:color="auto" w:fill="F0F0F0"/>'
+        : "";
+      const runs =
+        (await inlineToRuns(cell, ctx, isHeader ? { b: true } : null)) || "";
+      const p = `<w:p>${jc ? `<w:pPr>${jc}</w:pPr>` : ""}${runs}</w:p>`;
+      tcs += `<w:tc><w:tcPr>${shd}</w:tcPr>${p}</w:tc>`;
+    }
+    trs += `<w:tr>${tcs}</w:tr>`;
+  }
+  return (
+    '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/>' +
+    '<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>' +
+    "</w:tblPr>" +
+    "<w:tblGrid>" +
+    gridCols +
+    "</w:tblGrid>" +
+    trs +
+    "</w:tbl>"
+  );
+}
+
 // ── Block walker: children of .md-body → body XML ────────────────────────────
 async function blocksToOoxml(container, ctx) {
   let out = "";
@@ -479,6 +529,8 @@ async function blocksToOoxml(container, ctx) {
       // ── Later tasks insert their block branches here, before the final else ──
     } else if (tag === 'ul' || tag === 'ol') {
       out += await listToOoxml(el, ctx, 0, null);
+    } else if (tag === 'table') {
+      out += await tableToOoxml(el, ctx);
     } else {
       // Fallback for unrecognized blocks: render their text as a paragraph.
       out += paragraph(null, await inlineToRuns(el, ctx, null));
