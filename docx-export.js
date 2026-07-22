@@ -509,6 +509,71 @@ async function tableToOoxml(tableEl, ctx) {
   );
 }
 
+// ── Code blocks (syntax-highlighted) ─────────────────────────────────────────
+// Maps the renderer's sh-* token classes to GitHub-light hex colors.
+const SH_COLORS = {
+  "sh-kw": "CF222E",
+  "sh-str": "0A3069",
+  "sh-cmt": "6E7781",
+  "sh-num": "0550AE",
+  "sh-fn": "8250DF",
+  "sh-tag": "116329",
+  "sh-attr": "953800",
+  "sh-prop": "8250DF",
+  "sh-key": "0550AE",
+};
+const CODE_DEFAULT = "24292F";
+
+function codeBlockToOoxml(wrapEl, ctx) {
+  const codeEl = wrapEl.querySelector("pre > code");
+  if (!codeEl) return "";
+  // Build a flat list of {text, color} runs from the highlighted markup,
+  // then split into lines on '\n' so each line is its own shaded paragraph.
+  const runs = [];
+  (function walk(node, color) {
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) {
+        runs.push({ text: child.nodeValue, color });
+        continue;
+      }
+      if (child.nodeType !== 1) continue;
+      let c = color;
+      for (const cls of child.classList)
+        if (SH_COLORS[cls]) {
+          c = SH_COLORS[cls];
+          break;
+        }
+      walk(child, c);
+    }
+  })(codeEl, CODE_DEFAULT);
+
+  // Split runs across newlines into per-line arrays.
+  const lines = [[]];
+  for (const r of runs) {
+    const parts = r.text.split("\n");
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) lines.push([]);
+      if (parts[i])
+        lines[lines.length - 1].push({ text: parts[i], color: r.color });
+    }
+  }
+  // Drop a trailing empty line (from a final newline in the code text).
+  if (lines.length > 1 && lines[lines.length - 1].length === 0) lines.pop();
+
+  let out = "";
+  for (const line of lines) {
+    let inner = "";
+    for (const seg of line) {
+      inner += runXml(seg.text, {
+        code: true,
+        color: seg.color === CODE_DEFAULT ? null : seg.color,
+      });
+    }
+    out += paragraph("CodeBlock", inner);
+  }
+  return out;
+}
+
 // ── Block walker: children of .md-body → body XML ────────────────────────────
 async function blocksToOoxml(container, ctx) {
   let out = "";
@@ -531,6 +596,8 @@ async function blocksToOoxml(container, ctx) {
       out += await listToOoxml(el, ctx, 0, null);
     } else if (tag === 'table') {
       out += await tableToOoxml(el, ctx);
+    } else if (el.classList.contains('cb-wrap')) {
+      out += codeBlockToOoxml(el, ctx);
     } else {
       // Fallback for unrecognized blocks: render their text as a paragraph.
       out += paragraph(null, await inlineToRuns(el, ctx, null));
