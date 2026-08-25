@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Markdown Viewer",
   "version": "1.0.0",
-  "description": "Renders Markdown files beautifully in your browser with syntax highlighting, TOC, and dark mode.",
+  "description": "Renders .md files beautifully, with a built-in editor, Mermaid diagrams, LaTeX math, search, dark mode and Word export.",
 
   "permissions": ["storage"],
   "host_permissions": ["file:///*"],

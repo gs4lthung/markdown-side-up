@@ -1,0 +1,245 @@
+# -*- coding: utf-8 -*-
+"""Compose Chrome Web Store listing assets from the raw UI captures."""
+import pathlib
+
+BASE = pathlib.Path(__file__).parent
+
+CSS = """
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#05070c}
+body{
+  font-family:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.stage{position:relative;overflow:hidden;background:#070b12}
+
+/* ambient brand light */
+.stage::before{
+  content:'';position:absolute;inset:0;
+  background:
+    radial-gradient(900px 460px at 50% -14%, rgba(56,139,253,.42), transparent 68%),
+    radial-gradient(700px 400px at 100% 110%, rgba(88,166,255,.14), transparent 70%),
+    linear-gradient(180deg,#0c1524 0%,#070b12 55%,#05080e 100%);
+}
+.stage::after{
+  content:'';position:absolute;inset:0;opacity:.35;
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:46px 46px;
+  mask-image:radial-gradient(700px 380px at 50% 0%,#000 0%,transparent 75%);
+  -webkit-mask-image:radial-gradient(700px 380px at 50% 0%,#000 0%,transparent 75%);
+}
+.stage > *{position:relative;z-index:2}
+
+/* ── screenshot layout (1280x800) ─────────────────────────────────────── */
+.shot{width:1280px;height:800px}
+.eyebrow{
+  position:absolute;top:26px;left:0;right:0;
+  display:flex;align-items:center;justify-content:center;gap:9px;
+}
+.eyebrow img{width:21px;height:21px;display:block}
+.eyebrow span{
+  font-size:12px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:#7d97bd;
+}
+.head{position:absolute;top:60px;left:80px;right:80px;text-align:center}
+.head h1{
+  font-size:31px;line-height:1.16;font-weight:700;letter-spacing:-.6px;color:#f3f7fc;
+}
+.head h1 em{font-style:normal;color:#6cb0ff}
+.head p{
+  margin-top:10px;font-size:15px;line-height:1.45;font-weight:400;color:#8ea3c0;
+}
+
+/* browser window */
+.win{
+  position:absolute;left:64px;top:174px;width:1152px;
+  border:1px solid rgba(140,180,240,.20);
+  border-radius:13px 13px 0 0;
+  overflow:hidden;
+  box-shadow:0 -2px 0 rgba(255,255,255,.05) inset, 0 34px 90px rgba(0,0,0,.62);
+}
+.winbar{
+  height:36px;display:flex;align-items:center;gap:8px;padding:0 13px;
+  background:#171d27;border-bottom:1px solid #262e3b;
+}
+.winbar.light{background:#e9edf2;border-bottom-color:#d4dbe4}
+.dot{width:10px;height:10px;border-radius:50%}
+.d1{background:#ff5f57}.d2{background:#febc2e}.d3{background:#28c840}
+.url{
+  flex:1;margin:0 10px;height:22px;border-radius:6px;
+  background:#0f141c;border:1px solid #2a3340;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  font-size:11.5px;color:#8b9bb1;letter-spacing:.1px;
+}
+.winbar.light .url{background:#fff;border-color:#d0d7e0;color:#5b6675}
+.url svg{opacity:.65}
+.extico{width:19px;height:19px;display:block;flex:none}
+.win img.screen{display:block;width:1152px;height:640px}
+
+/* extension popup, anchored under the toolbar icon of the window above */
+.popup{
+  position:absolute;right:70px;top:221px;z-index:5;
+  border-radius:11px;overflow:hidden;
+  border:1px solid #39424f;
+  box-shadow:0 22px 60px rgba(0,0,0,.78), 0 2px 8px rgba(0,0,0,.5);
+}
+.popup img{display:block;width:280px}
+
+/* ── marquee (1400x560) ───────────────────────────────────────────────── */
+.marquee{width:1400px;height:560px}
+.marquee::before{
+  background:
+    radial-gradient(760px 520px at 24% -18%, rgba(56,139,253,.40), transparent 66%),
+    radial-gradient(620px 420px at 92% 108%, rgba(88,166,255,.15), transparent 70%),
+    linear-gradient(160deg,#0d1727 0%,#080d16 55%,#05080e 100%);
+}
+.marquee::after{
+  mask-image:radial-gradient(620px 420px at 24% 0%,#000 0%,transparent 78%);
+  -webkit-mask-image:radial-gradient(620px 420px at 24% 0%,#000 0%,transparent 78%);
+}
+.marquee .copy{position:absolute;left:80px;top:122px;width:580px}
+.mlogo{display:flex;align-items:center;gap:13px}
+.mlogo img{width:52px;height:52px;display:block;
+  filter:drop-shadow(0 8px 24px rgba(13,110,253,.55))}
+.mlogo b{font-size:18px;font-weight:600;letter-spacing:.01em;color:#c8d8ef}
+.marquee h1{
+  margin-top:28px;font-size:48px;line-height:1.08;font-weight:700;
+  letter-spacing:-1.3px;color:#fff;
+}
+.marquee h1 span{
+  background:linear-gradient(92deg,#8cc8ff,#4d95ff 55%,#2b7bf0);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.marquee p{margin-top:19px;font-size:19px;line-height:1.5;color:#9ab0cd}
+.chips{margin-top:26px;display:flex;gap:9px;flex-wrap:wrap}
+.chip{
+  padding:7px 14px;border-radius:999px;font-size:13.5px;font-weight:600;
+  color:#bcd4f2;background:rgba(56,139,253,.13);
+  border:1px solid rgba(88,166,255,.28);
+}
+.marquee .art{
+  position:absolute;right:-44px;top:46px;width:680px;
+  border-radius:13px 13px 0 0;overflow:hidden;
+  border:1px solid rgba(140,180,240,.22);
+  box-shadow:0 40px 110px rgba(0,0,0,.72);
+}
+.marquee .art img{display:block;width:680px}
+.marquee .art .winbar{height:32px}
+
+/* ── small tile (440x280) ─────────────────────────────────────────────── */
+.tile{width:440px;height:280px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center}
+.tile img{width:76px;height:76px;display:block;
+  filter:drop-shadow(0 14px 32px rgba(13,110,253,.6))}
+.tile h1{margin-top:20px;font-size:29px;font-weight:700;letter-spacing:-.7px;color:#fff}
+.tile .rule{width:46px;height:2px;margin:15px 0 0;border-radius:2px;
+  background:linear-gradient(90deg,transparent,#3b8bff,transparent)}
+.tile p{margin-top:14px;font-size:14.5px;font-weight:500;letter-spacing:.02em;color:#93aacb}
+"""
+
+GLOBE = ('<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+         'stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+         '<polyline points="14 2 14 8 20 8"/></svg>')
+
+
+def winbar(url, light=False, ico=True):
+    cls = "winbar light" if light else "winbar"
+    icon = '<img class="extico" src="app/icons/icon48.png" alt="">' if ico else ""
+    return f"""<div class="{cls}">
+      <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+      <div class="url">{GLOBE}{url}</div>{icon}
+    </div>"""
+
+
+def page(body, css_extra=""):
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<style>{CSS}{css_extra}</style></head><body>{body}</body></html>"""
+
+
+SHOTS = [
+    dict(
+        out="shot-1", img="raw/view-dark.png", light=False,
+        url="file:///C:/docs/payments-api.md",
+        h1='Every <em>.md</em> file, beautifully rendered',
+        p="Open a Markdown file in your browser and it renders itself — GitHub-style typography, "
+          "syntax highlighting and a live table of contents. Nothing to click.",
+    ),
+    dict(
+        out="shot-2", img="raw/split-light.png", light=True,
+        url="file:///C:/docs/release-2.4.md",
+        h1="Write and preview, side by side",
+        p="A full format toolbar, live preview as you type, smart lists and indentation — "
+          "then Ctrl+S writes the file straight back to your disk.",
+    ),
+    dict(
+        out="shot-3", img="raw/diagram-dark.png", light=False,
+        url="file:///C:/docs/architecture.md",
+        h1="Mermaid diagrams and LaTeX math, inline",
+        p="Flowcharts, sequence diagrams, Gantt charts and KaTeX formulas render right in the "
+          "document. Both engines are bundled — nothing is fetched from a CDN.",
+    ),
+    dict(
+        out="shot-4", img="raw/search-light.png", light=True,
+        url="file:///C:/docs/webhook-guide.md",
+        h1="Search the whole document instantly",
+        p="Highlighted matches, next / previous navigation and a scroll-spy sidebar "
+          "that always knows where you are.",
+    ),
+    dict(
+        out="shot-5", img="raw/theme-dark.png", light=False, popup="raw/popup-dark.png",
+        url="file:///C:/docs/payments-api.md",
+        h1="Your theme, your size, your machine",
+        p="Auto, light or dark with adjustable text size — plus one-click export to Word (.docx). "
+          "No account, no cloud, no telemetry.",
+    ),
+]
+
+for s in SHOTS:
+    popup_html = ""
+    if s.get("popup"):
+        popup_html = f'<div class="popup"><img src="{s["popup"]}" alt=""></div>'
+    body = f"""<div class="stage shot">
+  <div class="eyebrow"><img src="app/icons/icon128.png" alt=""><span>Markdown Viewer &amp; Editor</span></div>
+  <div class="head"><h1>{s['h1']}</h1><p>{s['p']}</p></div>
+  <div class="win">
+    {winbar(s['url'], s['light'])}
+    <img class="screen" src="{s['img']}" alt="">
+  </div>
+  {popup_html}
+</div>"""
+    (BASE / f"{s['out']}.html").write_text(page(body), encoding="utf-8")
+    print("wrote", s["out"])
+
+# ── marquee ───────────────────────────────────────────────────────────────────
+marquee = f"""<div class="stage marquee">
+  <div class="copy">
+    <div class="mlogo"><img src="app/icons/icon128.png" alt=""><b>Markdown Viewer &amp; Editor</b></div>
+    <h1>Markdown that just<br><span>opens and looks right</span></h1>
+    <p>Render, edit and export any <b style="color:#cfe0f7;font-weight:600">.md</b> file
+       straight from your browser. Offline, private, zero setup.</p>
+    <div class="chips">
+      <span class="chip">GitHub Flavored Markdown</span>
+      <span class="chip">Mermaid + LaTeX</span>
+      <span class="chip">Live editor</span>
+      <span class="chip">Export to .docx</span>
+    </div>
+  </div>
+  <div class="art">
+    {winbar("payments-api.md", False, ico=False)}
+    <img src="raw/marquee-app.png" alt="">
+  </div>
+</div>"""
+(BASE / "marquee.html").write_text(page(marquee), encoding="utf-8")
+print("wrote marquee")
+
+# ── small tile ────────────────────────────────────────────────────────────────
+tile = """<div class="stage tile">
+  <img src="app/icons/icon128.png" alt="">
+  <h1>Markdown Viewer</h1>
+  <div class="rule"></div>
+  <p>Read &nbsp;·&nbsp; Edit &nbsp;·&nbsp; Export &nbsp;·&nbsp; Offline</p>
+</div>"""
+(BASE / "tile.html").write_text(page(tile), encoding="utf-8")
+print("wrote tile")

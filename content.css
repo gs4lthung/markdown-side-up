@@ -702,7 +702,14 @@ html, body { height: 100%; overflow: hidden; }
   border-radius: 8px;
   box-shadow: 0 8px 48px rgba(0, 0, 0, 0.5);
   transition: transform 0.15s ease;
-  cursor: default;
+  cursor: grab;
+  touch-action: none; /* let us handle drag-to-pan instead of the browser */
+}
+
+/* While the user is dragging: no transition (so it tracks the cursor 1:1) */
+#md-image-lightbox-img.panning {
+  transition: none;
+  cursor: grabbing;
 }
 
 #md-image-lightbox-controls {
@@ -938,6 +945,14 @@ html, body { height: 100%; overflow: hidden; }
   box-shadow: 0 8px 48px rgba(0, 0, 0, 0.5);
   transform-origin: center center;
   transition: transform 0.15s ease;
+  cursor: grab;
+  touch-action: none; /* let us handle drag-to-pan instead of the browser */
+}
+
+/* While the user is dragging: no transition (so it tracks the cursor 1:1) */
+#md-diagram-lightbox svg.panning {
+  transition: none;
+  cursor: grabbing;
 }
 #md-diagram-lightbox-controls {
   position: fixed;

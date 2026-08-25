@@ -1,0 +1,113 @@
+CHROME WEB STORE — "Phương thức bảo vệ quyền riêng tư" (Privacy practices) tab
+Answers to paste. Verified against the source on 2026-07-23.
+
+
+──────────────────────────────────────────────────────────────────────
+1. SINGLE PURPOSE  ("Mô tả mục đích duy nhất")
+──────────────────────────────────────────────────────────────────────
+
+Markdown Viewer & Editor has one purpose: to display Markdown files as
+formatted documents in the browser, and to let the user edit and export the
+file they are viewing.
+
+When the user opens a .md file, Chrome would normally show it as raw,
+unformatted text. This extension reads that text from the page and replaces it
+with a rendered version of the same document. Every feature serves that single
+purpose and operates only on the document currently open in the tab: syntax
+highlighting, table of contents, in-document search, Mermaid diagrams, LaTeX
+math, light/dark theming, the built-in editor, and export to .docx.
+
+The extension does not act on any page that is not a Markdown file.
+
+
+──────────────────────────────────────────────────────────────────────
+2. PERMISSION: storage  ("lý do sử dụng quyền storage")
+──────────────────────────────────────────────────────────────────────
+
+The storage permission is used to remember exactly two display preferences
+that the user sets in the extension popup:
+
+  • the selected theme (auto, light, or dark)
+  • the reading font size (13–22px)
+
+These two values are read each time a Markdown document is rendered, so the
+user's chosen appearance persists across documents and browser sessions
+instead of resetting every time.
+
+Nothing else is written to storage. No document content, file names, file
+paths, browsing history, or personal information is stored, and nothing in
+storage is transmitted off the device.
+
+
+──────────────────────────────────────────────────────────────────────
+3. HOST PERMISSION: file:///*
+──────────────────────────────────────────────────────────────────────
+
+The extension's core function is rendering Markdown files that the user opens
+from their own computer. Chrome serves those files as file:/// URLs, so
+file:///* access is the only way the content script can read the raw Markdown
+text of the page the user has already opened and replace it with the rendered
+document.
+
+The permission is used solely to read and re-render a .md file that the user
+has deliberately opened in a tab. No file is uploaded, copied, indexed, or
+transmitted anywhere, and the extension does not read, list, or access any
+file the user has not opened themselves.
+
+
+──────────────────────────────────────────────────────────────────────
+4. REMOTE CODE  ("lý do sử dụng mã từ xa")
+──────────────────────────────────────────────────────────────────────
+
+  >>> Select: "No, I am not using remote code."  <<<
+
+If a justification box appears, use this:
+
+All JavaScript this extension executes ships inside the package. The two
+third-party libraries it uses — Mermaid (mermaid.min.js) and KaTeX
+(katex/katex.min.js) — are bundled locally and loaded with
+chrome.runtime.getURL(), never from a CDN or any external server. The
+extension does not use eval() or new Function(), does not download or execute
+any script, WASM module, or code string from a remote source, and contacts no
+server operated by the developer.
+
+
+──────────────────────────────────────────────────────────────────────
+5. DATA USAGE  ("Hoạt động sử dụng dữ liệu")
+──────────────────────────────────────────────────────────────────────
+
+Leave EVERY data-collection checkbox UNCHECKED. The extension collects none of
+these categories:
+
+  ☐ Personally identifiable information     ☐ Location
+  ☐ Health information                      ☐ Web history
+  ☐ Financial and payment information       ☐ User activity
+  ☐ Authentication information              ☐ Website content
+  ☐ Personal communications
+
+Then tick all three certifications ("Tôi xác nhận..."):
+
+  ☑ I do not sell or transfer user data to third parties, outside of the
+    approved use cases
+  ☑ I do not use or transfer user data for purposes that are unrelated to my
+    item's single purpose
+  ☑ I do not use or transfer user data to determine creditworthiness or for
+    lending purposes
+
+All three are accurate: no user data ever leaves the device, so there is
+nothing to sell, transfer, or repurpose.
+
+
+──────────────────────────────────────────────────────────────────────
+6. ACCOUNT-LEVEL ITEMS  (Settings page, not this tab)
+──────────────────────────────────────────────────────────────────────
+
+These two cannot be fixed on the item page — go to the developer dashboard's
+Settings ("Cài đặt") page:
+
+  a. Enter a publisher contact email.
+     NOTE: this address is shown publicly on your store listing.
+  b. Click verify, then open the confirmation link Google emails to that
+     address. Publishing stays blocked until verification completes.
+
+Then return to the item, click "Lưu bản nháp" (Save draft), and submit.

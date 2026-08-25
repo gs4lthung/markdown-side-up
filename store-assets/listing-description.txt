@@ -1,0 +1,96 @@
+Open any Markdown file in your browser and read it the way it was meant to look — formatted, syntax-highlighted, and instantly navigable. No app to install, no website to upload to, no account to create.
+
+Chrome normally shows a .md file as a wall of raw text. Markdown Viewer & Editor turns it into a clean, GitHub-style document the moment the page loads — straight from your hard drive or from the web. When you want to change something, switch to the built-in editor, type, and save it right back to the same file.
+
+Everything happens inside your browser. Nothing is uploaded, nothing is tracked.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+READING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Automatic rendering — open a Markdown file and it just works. No button to press.
+• Full GitHub Flavored Markdown — tables, task lists, fenced code blocks, strikethrough, nested blockquotes and lists, setext headings, ==highlighted text== and ^superscript^.
+• Syntax highlighting for 20 languages, including JavaScript, TypeScript, Python, Go, Rust, Java, C# and SQL.
+• Collapsible table of contents that follows you as you scroll, so you always know where you are in a long document. Collapse it to a slim icon strip when you want the full width.
+• Full-text search with Ctrl+F — every match highlighted, a running match count, and Enter / Shift+Enter to jump between them.
+• Dark, light, or automatic theme that follows your system setting. Your choice is remembered.
+• Adjustable text size, from 13px to 22px.
+• Copy button on every code block.
+• Click any image to open it full-screen, or download it with one click.
+• Around 390 emoji shortcodes — :rocket: becomes 🚀, :fire: becomes 🔥.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WRITING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The same tab you read in is also a Markdown editor. Three modes, one click apart:
+
+• View — the finished document.
+• Edit — the raw Markdown.
+• Split — both at once, with the preview updating as you type and the two panes scrolling together.
+
+• Formatting toolbar for headings, bold, italic, strikethrough, links, images, inline code, code blocks, bulleted and numbered lists, task lists, blockquotes, tables and horizontal rules.
+• Keyboard shortcuts: Ctrl+B bold, Ctrl+I italic, Ctrl+K link, Ctrl+E inline code, Ctrl+S save.
+• Smart editing — Tab and Shift+Tab indent whole selections, and pressing Enter continues the list you are already in.
+• Live word and character count in the toolbar.
+• Save straight back to the original file on disk. If your browser doesn't support that, it falls back to a normal download.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DIAGRAMS AND MATH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Mermaid diagrams render inline — flowcharts, sequence diagrams, class diagrams, state diagrams, Gantt charts, pie charts and more. Click a diagram to open it full-screen and zoom from 0.25× to 4×.
+• LaTeX math rendered with KaTeX, both inline ($E = mc^2$) and as display blocks ($$ ... $$).
+• Both engines are bundled inside the extension. Diagrams and formulas render with no internet connection and no request to any CDN — which also means they still work on a plane, behind a corporate firewall, or on an air-gapped machine.
+• Switching between light and dark re-renders diagrams to match.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXPORT TO WORD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Turn any Markdown document into a real .docx file with one click, or Ctrl+Shift+E.
+
+It is genuine Office Open XML, not an HTML file with a .doc extension — Word, LibreOffice and Google Docs all open it natively. Headings, tables, bulleted and numbered lists, code blocks, images, bold and italic all carry across, and Mermaid diagrams and KaTeX formulas are converted to images so they survive the trip.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PRIVACY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+There is no account, no cloud, and no telemetry. Your documents are read and rendered locally and never leave your computer. The extension has no servers and contacts none — every library it needs, including Mermaid and KaTeX, is packaged inside it. The only thing it ever loads from the network is an image your own document points at, exactly as your browser would on any web page.
+
+It asks for exactly two things:
+
+• Storage — to remember your theme and text size. That is all that is ever saved.
+• Access to file:// URLs — so it can render Markdown files that live on your own disk.
+
+Manifest V3, no third-party services, no remote code.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ONE-TIME SETUP FOR LOCAL FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Chrome blocks extensions from local files by default, so to read .md files from your own computer you need to switch this on once:
+
+1. Go to chrome://extensions
+2. Find Markdown Viewer & Editor and click "Details"
+3. Turn on "Allow access to file URLs"
+
+Markdown files hosted on the web work immediately, without this step.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SUPPORTED FILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Opens standard Markdown files (the .md extension) as well as the common Markdown filename variants. Works in Chrome and Edge 88 and later.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Built for people who keep their notes, READMEs, specs and documentation as plain text files, and want to read them without a subscription, a sign-in screen, or an upload.
